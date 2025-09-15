@@ -13,12 +13,31 @@ export const api = axios.create({
   },
 });
 
+// Interceptor para agregar token de autenticación
+api.interceptors.request.use(
+  (config) => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => {
+    return Promise.reject(error);
+  }
+);
+
 // Interceptor para manejar errores
 api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 500) {
       console.error('Error del servidor:', error.response.data);
+    }
+    if (error.response?.status === 401) {
+      // Token expirado o inválido
+      localStorage.removeItem('token');
+      window.location.href = '/login';
     }
     return Promise.reject(error);
   }
@@ -152,6 +171,7 @@ export const comprasGeneralesService = {
     fecha_inicio?: string;
     fecha_fin?: string;
     tipo_precio?: string;
+    cliente?: string;  // ← AGREGADO
     limite?: number;
     pagina?: number;
   }): Promise<PaginatedResponse<CompraGeneral>> => {
@@ -163,7 +183,7 @@ export const comprasGeneralesService = {
   },
 
   getById: async (id: number): Promise<CompraGeneral> => {
-    const response = await api.get(`/compras/general/${id}`);
+    const response = await api.get(`/compras/generales/${id}`);  // ← CORREGIDO
     return response.data;
   },
 
@@ -173,12 +193,12 @@ export const comprasGeneralesService = {
   },
 
   update: async (id: number, data: Partial<CompraGeneral>): Promise<CompraGeneral> => {
-    const response = await api.put(`/compras/general/${id}`, data);
+    const response = await api.put(`/compras/generales/${id}`, data);  // ← CORREGIDO
     return response.data;
   },
 
   delete: async (id: number): Promise<void> => {
-    await api.delete(`/compras/general/${id}`);
+    await api.delete(`/compras/generales/${id}`);  // ← CORREGIDO
   },
 };
 
@@ -189,6 +209,7 @@ export const comprasMaterialesService = {
     fecha_fin?: string;
     material_id?: number;
     tipo_precio?: string;
+    cliente?: string;  // ← AGREGADO
     limite?: number;
     pagina?: number;
   }): Promise<PaginatedResponse<CompraMaterial>> => {
@@ -200,7 +221,7 @@ export const comprasMaterialesService = {
   },
 
   getById: async (id: number): Promise<CompraMaterial> => {
-    const response = await api.get(`/compras/material/${id}`);
+    const response = await api.get(`/compras/materiales/${id}`);  // ← CORREGIDO
     return response.data;
   },
 
@@ -210,12 +231,12 @@ export const comprasMaterialesService = {
   },
 
   update: async (id: number, data: Partial<CompraMaterial>): Promise<CompraMaterial> => {
-    const response = await api.put(`/compras/material/${id}`, data);
+    const response = await api.put(`/compras/materiales/${id}`, data);  // ← CORREGIDO
     return response.data;
   },
 
   delete: async (id: number): Promise<void> => {
-    await api.delete(`/compras/material/${id}`);
+    await api.delete(`/compras/materiales/${id}`);  // ← CORREGIDO
   },
 };
 
@@ -298,6 +319,16 @@ export const gastosService = {
 
   createCategoria: async (data: Omit<CategoriaGasto, 'id' | 'activo'>): Promise<CategoriaGasto> => {
     const response = await api.post('/gastos/categorias', data);
+    return response.data;
+  },
+};
+
+// Servicio para clientes (autocompletado)
+export const clientesService = {
+  buscar: async (busqueda: string): Promise<string[]> => {
+    const response = await api.get(`/compras/clientes/lista`, {
+      params: { buscar: busqueda }
+    });
     return response.data;
   },
 };
