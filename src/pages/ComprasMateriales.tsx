@@ -1,7 +1,7 @@
 // Archivo: src/pages/ComprasMateriales.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, Calculator } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, Package, Calculator, User } from 'lucide-react';
 import { CompraMaterial, Material, comprasMaterialesService, materialesService, formatCurrency, formatNumber } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
@@ -18,8 +18,15 @@ const ComprasMateriales: React.FC = () => {
     fecha_inicio: '',
     fecha_fin: '',
     material_id: '',
-    tipo_precio: ''
+    tipo_precio: '',
+    cliente: ''
   });
+  
+  // Estados para autocompletado de clientes
+  const [clientesSugeridos, setClientesSugeridos] = useState<string[]>([]);
+  const [mostrarSugerenciasFormulario, setMostrarSugerenciasFormulario] = useState(false);
+  const [mostrarSugerenciasFiltro, setMostrarSugerenciasFiltro] = useState(false);
+  
   const { addToast } = useToast();
 
   // Estados para el formulario
@@ -29,6 +36,7 @@ const ComprasMateriales: React.FC = () => {
     kilos: 0,
     precio_kilo: 0,
     tipo_precio: 'ordinario' as 'ordinario' | 'camion' | 'noche',
+    cliente: '',
     observaciones: '',
   });
 
@@ -36,6 +44,68 @@ const ComprasMateriales: React.FC = () => {
     fetchCompras();
     fetchMateriales();
   }, [filtros]);
+
+  // Buscar clientes con debounce para formulario
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (formData.cliente && formData.cliente.length >= 2) {
+        buscarClientes(formData.cliente, 'formulario');
+      } else {
+        setClientesSugeridos([]);
+        setMostrarSugerenciasFormulario(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [formData.cliente]);
+
+  // Buscar clientes con debounce para filtros
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (filtros.cliente && filtros.cliente.length >= 2) {
+        buscarClientes(filtros.cliente, 'filtro');
+      } else {
+        setMostrarSugerenciasFiltro(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [filtros.cliente]);
+
+  const buscarClientes = async (busqueda: string, origen: 'formulario' | 'filtro') => {
+    try {
+      const response = await fetch(`/api/compras/clientes/lista?buscar=${encodeURIComponent(busqueda)}`, {
+        headers: {
+          'Authorization': `Bearer ${localStorage.getItem('token')}`
+        }
+      });
+      
+      if (response.ok) {
+        const clientes = await response.json();
+        setClientesSugeridos(clientes);
+        
+        if (origen === 'formulario') {
+          setMostrarSugerenciasFormulario(true);
+        } else {
+          setMostrarSugerenciasFiltro(true);
+        }
+      }
+    } catch (error) {
+      console.error('Error buscando clientes:', error);
+    }
+  };
+
+  const seleccionarClienteFormulario = (cliente: string) => {
+    setFormData({ ...formData, cliente });
+    setMostrarSugerenciasFormulario(false);
+    setClientesSugeridos([]);
+  };
+
+  const seleccionarClienteFiltro = (cliente: string) => {
+    setFiltros({ ...filtros, cliente });
+    setMostrarSugerenciasFiltro(false);
+    setClientesSugeridos([]);
+  };
 
   const fetchCompras = async () => {
     try {
@@ -123,6 +193,7 @@ const ComprasMateriales: React.FC = () => {
       kilos: 0,
       precio_kilo: 0,
       tipo_precio: 'ordinario',
+      cliente: '',
       observaciones: '',
     });
   };
@@ -135,6 +206,7 @@ const ComprasMateriales: React.FC = () => {
       kilos: compra.kilos,
       precio_kilo: compra.precio_kilo,
       tipo_precio: compra.tipo_precio,
+      cliente: (compra as any).cliente || '',
       observaciones: compra.observaciones || '',
     });
     setShowModal(true);
@@ -250,7 +322,7 @@ const ComprasMateriales: React.FC = () => {
       }}>
         <div style={{ 
           display: 'grid', 
-          gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+          gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', 
           gap: '16px' 
         }}>
           <div>
@@ -356,6 +428,73 @@ const ComprasMateriales: React.FC = () => {
               <option value="camion">Camión</option>
               <option value="noche">Noche</option>
             </select>
+          </div>
+          <div style={{ position: 'relative' }}>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: '#374151', 
+              marginBottom: '4px' 
+            }}>
+              Cliente
+            </label>
+            <input
+              type="text"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={filtros.cliente}
+              onChange={(e) => setFiltros({ ...filtros, cliente: e.target.value })}
+              onBlur={() => setTimeout(() => setMostrarSugerenciasFiltro(false), 200)}
+              placeholder="Buscar por cliente..."
+            />
+            
+            {mostrarSugerenciasFiltro && clientesSugeridos.length > 0 && (
+              <ul style={{
+                position: 'absolute',
+                top: '100%',
+                left: 0,
+                right: 0,
+                backgroundColor: 'white',
+                border: '1px solid #d1d5db',
+                borderTop: 'none',
+                borderRadius: '0 0 6px 6px',
+                maxHeight: '200px',
+                overflowY: 'auto',
+                zIndex: 1000,
+                listStyle: 'none',
+                margin: 0,
+                padding: 0,
+                boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+              }}>
+                {clientesSugeridos.map((cliente, index) => (
+                  <li
+                    key={index}
+                    onClick={() => seleccionarClienteFiltro(cliente)}
+                    style={{
+                      padding: '8px 12px',
+                      cursor: 'pointer',
+                      borderBottom: '1px solid #f3f4f6',
+                      fontSize: '14px',
+                      transition: 'background-color 0.15s ease'
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.backgroundColor = '#f9fafb';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.backgroundColor = 'white';
+                    }}
+                  >
+                    {cliente}
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
       </div>
@@ -519,6 +658,17 @@ const ComprasMateriales: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
+                  Cliente
+                </th>
+                <th style={{ 
+                  padding: '12px 24px', 
+                  textAlign: 'left', 
+                  fontSize: '12px', 
+                  fontWeight: '500', 
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
                   Fecha
                 </th>
                 <th style={{ 
@@ -605,6 +755,12 @@ const ComprasMateriales: React.FC = () => {
                       </div>
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <User size={16} style={{ color: '#9ca3af' }} />
+                        <span>{(compra as any).cliente || 'Sin cliente'}</span>
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
                       {new Date(compra.fecha).toLocaleDateString('es-CO')}
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
@@ -685,10 +841,10 @@ const ComprasMateriales: React.FC = () => {
         title={editingCompra ? 'Editar Compra por Material' : 'Nueva Compra por Material'}
         size="lg"
       >
-        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
             gap: '16px' 
           }}>
             <div>
@@ -751,6 +907,75 @@ const ComprasMateriales: React.FC = () => {
                 value={formData.fecha}
                 onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
               />
+            </div>
+
+            <div style={{ position: 'relative' }}>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#374151', 
+                marginBottom: '4px' 
+              }}>
+                Cliente
+              </label>
+              <input
+                type="text"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+                value={formData.cliente}
+                onChange={(e) => setFormData({ ...formData, cliente: e.target.value })}
+                onBlur={() => setTimeout(() => setMostrarSugerenciasFormulario(false), 200)}
+                placeholder="Nombre del cliente (opcional)"
+                maxLength={100}
+              />
+              
+              {mostrarSugerenciasFormulario && clientesSugeridos.length > 0 && (
+                <ul style={{
+                  position: 'absolute',
+                  top: '100%',
+                  left: 0,
+                  right: 0,
+                  backgroundColor: 'white',
+                  border: '1px solid #d1d5db',
+                  borderTop: 'none',
+                  borderRadius: '0 0 6px 6px',
+                  maxHeight: '200px',
+                  overflowY: 'auto',
+                  zIndex: 1000,
+                  listStyle: 'none',
+                  margin: 0,
+                  padding: 0,
+                  boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
+                }}>
+                  {clientesSugeridos.map((cliente, index) => (
+                    <li
+                      key={index}
+                      onClick={() => seleccionarClienteFormulario(cliente)}
+                      style={{
+                        padding: '8px 12px',
+                        cursor: 'pointer',
+                        borderBottom: '1px solid #f3f4f6',
+                        fontSize: '14px',
+                        transition: 'background-color 0.15s ease'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.backgroundColor = '#f9fafb';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.backgroundColor = 'white';
+                      }}
+                    >
+                      {cliente}
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
 
@@ -908,11 +1133,14 @@ const ComprasMateriales: React.FC = () => {
             >
               Cancelar
             </Button>
-            <Button type="submit">
+            <Button 
+              type="button"
+              onClick={handleSubmit}
+            >
               {editingCompra ? 'Actualizar' : 'Registrar'} Compra
             </Button>
           </div>
-        </form>
+        </div>
       </Modal>
     </div>
   );
