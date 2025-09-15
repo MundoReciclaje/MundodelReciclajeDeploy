@@ -42,6 +42,7 @@ export interface CompraGeneral {
   fecha: string;
   total_pesos: number;
   tipo_precio: 'ordinario' | 'camion' | 'noche';
+  cliente?: string;
   observaciones?: string;
   fecha_creacion: string;
 }
@@ -56,6 +57,7 @@ export interface CompraMaterial {
   precio_kilo: number;
   total_pesos: number;
   tipo_precio: 'ordinario' | 'camion' | 'noche';
+  cliente?: string;
   observaciones?: string;
   fecha_creacion: string;
 }
