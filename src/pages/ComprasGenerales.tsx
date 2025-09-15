@@ -1,42 +1,48 @@
-// Archivo: src/pages/ComprasGenerales.tsx
+// Archivo: src/pages/ComprasMateriales.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, ShoppingCart, Calendar } from 'lucide-react';
-import { CompraGeneral, comprasGeneralesService, formatCurrency } from '../services/api';
+import { Plus, Search, Edit, Trash2, Package, Calculator } from 'lucide-react';
+import { CompraMaterial, Material, comprasMaterialesService, materialesService, formatCurrency, formatNumber } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 
-const ComprasGenerales: React.FC = () => {
-  const [compras, setCompras] = useState<CompraGeneral[]>([]);
+const ComprasMateriales: React.FC = () => {
+  const [compras, setCompras] = useState<CompraMaterial[]>([]);
+  const [materiales, setMateriales] = useState<Material[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingCompra, setEditingCompra] = useState<CompraGeneral | null>(null);
+  const [editingCompra, setEditingCompra] = useState<CompraMaterial | null>(null);
   const [filtros, setFiltros] = useState({
     fecha_inicio: '',
     fecha_fin: '',
+    material_id: '',
     tipo_precio: ''
   });
   const { addToast } = useToast();
 
   // Estados para el formulario
   const [formData, setFormData] = useState({
+    material_id: '',
     fecha: new Date().toISOString().split('T')[0],
-    total_pesos: 0,
+    kilos: 0,
+    precio_kilo: 0,
     tipo_precio: 'ordinario' as 'ordinario' | 'camion' | 'noche',
     observaciones: '',
   });
 
   useEffect(() => {
     fetchCompras();
+    fetchMateriales();
   }, [filtros]);
 
   const fetchCompras = async () => {
     try {
       setLoading(true);
-      const response = await comprasGeneralesService.getAll({
+      const response = await comprasMaterialesService.getAll({
         ...filtros,
+        material_id: filtros.material_id ? parseInt(filtros.material_id) : undefined,
         limite: 100,
         pagina: 1
       });
@@ -53,28 +59,42 @@ const ComprasGenerales: React.FC = () => {
     }
   };
 
+  const fetchMateriales = async () => {
+    try {
+      const data = await materialesService.getAll({ activo: true });
+      setMateriales(data);
+    } catch (error) {
+      console.error('Error cargando materiales:', error);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (formData.total_pesos <= 0) {
+    if (!formData.material_id || formData.kilos <= 0 || formData.precio_kilo <= 0) {
       addToast({
         type: 'warning',
         title: 'Datos inválidos',
-        message: 'El total debe ser mayor a cero'
+        message: 'Todos los campos son requeridos y deben ser mayores a cero'
       });
       return;
     }
     
     try {
+      const submitData = {
+        ...formData,
+        material_id: parseInt(formData.material_id)
+      };
+
       if (editingCompra) {
-        await comprasGeneralesService.update(editingCompra.id, formData);
+        await comprasMaterialesService.update(editingCompra.id, submitData);
         addToast({
           type: 'success',
           title: 'Compra actualizada',
           message: 'La compra se ha actualizado correctamente'
         });
       } else {
-        await comprasGeneralesService.create(formData);
+        await comprasMaterialesService.create(submitData);
         addToast({
           type: 'success',
           title: 'Compra registrada',
@@ -98,28 +118,32 @@ const ComprasGenerales: React.FC = () => {
 
   const resetForm = () => {
     setFormData({
+      material_id: '',
       fecha: new Date().toISOString().split('T')[0],
-      total_pesos: 0,
+      kilos: 0,
+      precio_kilo: 0,
       tipo_precio: 'ordinario',
       observaciones: '',
     });
   };
 
-  const handleEdit = (compra: CompraGeneral) => {
+  const handleEdit = (compra: CompraMaterial) => {
     setEditingCompra(compra);
     setFormData({
+      material_id: compra.material_id.toString(),
       fecha: compra.fecha,
-      total_pesos: compra.total_pesos,
+      kilos: compra.kilos,
+      precio_kilo: compra.precio_kilo,
       tipo_precio: compra.tipo_precio,
       observaciones: compra.observaciones || '',
     });
     setShowModal(true);
   };
 
-  const handleDelete = async (compra: CompraGeneral) => {
-    if (window.confirm(`¿Estás seguro de que quieres eliminar esta compra de ${formatCurrency(compra.total_pesos)}?`)) {
+  const handleDelete = async (compra: CompraMaterial) => {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar esta compra de ${compra.material_nombre}?`)) {
       try {
-        await comprasGeneralesService.delete(compra.id);
+        await comprasMaterialesService.delete(compra.id);
         addToast({
           type: 'success',
           title: 'Compra eliminada',
@@ -149,11 +173,27 @@ const ComprasGenerales: React.FC = () => {
   const getTipoPrecioLabel = (tipo: string) => {
     const labels: { [key: string]: string } = {
       'ordinario': 'Ordinario',
-      'camion': 'Camión', 
+      'camion': 'Camión',
       'noche': 'Noche'
     };
     return labels[tipo] || tipo;
   };
+
+  // Auto-completar precio cuando se selecciona material y tipo
+  const handleMaterialOrTipoChange = (materialId: string, tipoPrecio: string) => {
+    const material = materiales.find(m => m.id.toString() === materialId);
+    if (material) {
+      let precio = 0;
+      switch (tipoPrecio) {
+        case 'ordinario': precio = material.precio_ordinario; break;
+        case 'camion': precio = material.precio_camion; break;
+        case 'noche': precio = material.precio_noche; break;
+      }
+      setFormData(prev => ({ ...prev, precio_kilo: precio }));
+    }
+  };
+
+  const totalCalculado = formData.kilos * formData.precio_kilo;
 
   if (loading) {
     return (
@@ -181,14 +221,14 @@ const ComprasGenerales: React.FC = () => {
             color: '#111827', 
             margin: '0 0 8px 0' 
           }}>
-            Compras Generales
+            Compras por Material
           </h1>
           <p style={{ 
             fontSize: '14px', 
             color: '#6b7280', 
             margin: 0 
           }}>
-            Registra compras cuando no se pueda separar por material específico
+            Registra compras específicas por tipo de material
           </p>
         </div>
         <Button
@@ -267,6 +307,36 @@ const ComprasGenerales: React.FC = () => {
               color: '#374151', 
               marginBottom: '4px' 
             }}>
+              Material
+            </label>
+            <select
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                backgroundColor: 'white',
+                fontSize: '14px'
+              }}
+              value={filtros.material_id}
+              onChange={(e) => setFiltros({ ...filtros, material_id: e.target.value })}
+            >
+              <option value="">Todos los materiales</option>
+              {materiales.map(material => (
+                <option key={material.id} value={material.id}>
+                  {material.nombre}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: '#374151', 
+              marginBottom: '4px' 
+            }}>
               Tipo de Precio
             </label>
             <select
@@ -290,10 +360,10 @@ const ComprasGenerales: React.FC = () => {
         </div>
       </div>
 
-      {/* Estadísticas rápidas */}
+      {/* Estadísticas */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
         gap: '20px', 
         marginBottom: '32px' 
       }}>
@@ -322,13 +392,32 @@ const ComprasGenerales: React.FC = () => {
           }}>
             {formatCurrency(compras.reduce((sum, compra) => sum + compra.total_pesos, 0))}
           </div>
+        </div>
+
+        <div style={{
+          backgroundColor: 'white',
+          padding: '24px',
+          borderRadius: '8px',
+          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+          border: '1px solid #e5e7eb'
+        }}>
           <div style={{ 
             fontSize: '14px', 
+            color: '#6b7280', 
             fontWeight: '500',
-            color: '#6b7280',
-            margin: 0
+            margin: '0 0 4px 0',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
           }}>
-            {compras.length} transacciones
+            Total Kilos
+          </div>
+          <div style={{ 
+            fontSize: '24px', 
+            fontWeight: 'bold', 
+            color: '#111827',
+            margin: '0 0 8px 0'
+          }}>
+            {formatNumber(compras.reduce((sum, compra) => sum + compra.kilos, 0), 0)} kg
           </div>
         </div>
 
@@ -347,7 +436,7 @@ const ComprasGenerales: React.FC = () => {
             textTransform: 'uppercase',
             letterSpacing: '0.05em'
           }}>
-            Promedio por Compra
+            Precio Promedio/Kg
           </div>
           <div style={{ 
             fontSize: '24px', 
@@ -356,7 +445,7 @@ const ComprasGenerales: React.FC = () => {
             margin: '0 0 8px 0'
           }}>
             {compras.length > 0 
-              ? formatCurrency(compras.reduce((sum, compra) => sum + compra.total_pesos, 0) / compras.length)
+              ? formatCurrency(compras.reduce((sum, compra) => sum + compra.precio_kilo, 0) / compras.length)
               : formatCurrency(0)
             }
           </div>
@@ -377,18 +466,15 @@ const ComprasGenerales: React.FC = () => {
             textTransform: 'uppercase',
             letterSpacing: '0.05em'
           }}>
-            Última Compra
+            Transacciones
           </div>
           <div style={{ 
-            fontSize: '20px', 
+            fontSize: '24px', 
             fontWeight: 'bold', 
             color: '#111827',
             margin: '0 0 8px 0'
           }}>
-            {compras.length > 0 
-              ? new Date(compras[0].fecha).toLocaleDateString('es-CO')
-              : 'N/A'
-            }
+            {compras.length}
           </div>
         </div>
       </div>
@@ -422,7 +508,40 @@ const ComprasGenerales: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
+                  Material
+                </th>
+                <th style={{ 
+                  padding: '12px 24px', 
+                  textAlign: 'left', 
+                  fontSize: '12px', 
+                  fontWeight: '500', 
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
                   Fecha
+                </th>
+                <th style={{ 
+                  padding: '12px 24px', 
+                  textAlign: 'left', 
+                  fontSize: '12px', 
+                  fontWeight: '500', 
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Kilos
+                </th>
+                <th style={{ 
+                  padding: '12px 24px', 
+                  textAlign: 'left', 
+                  fontSize: '12px', 
+                  fontWeight: '500', 
+                  color: '#6b7280',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.05em'
+                }}>
+                  Precio/Kg
                 </th>
                 <th style={{ 
                   padding: '12px 24px', 
@@ -444,18 +563,7 @@ const ComprasGenerales: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Tipo Precio
-                </th>
-                <th style={{ 
-                  padding: '12px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '12px', 
-                  fontWeight: '500', 
-                  color: '#6b7280',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Observaciones
+                  Tipo
                 </th>
                 <th style={{ 
                   padding: '12px 24px', 
@@ -489,9 +597,21 @@ const ComprasGenerales: React.FC = () => {
                   >
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Calendar size={16} style={{ color: '#9ca3af' }} />
-                        <span>{new Date(compra.fecha).toLocaleDateString('es-CO')}</span>
+                        <Package size={16} style={{ color: '#9ca3af' }} />
+                        <div>
+                          <div style={{ fontWeight: '500' }}>{compra.material_nombre}</div>
+                          <div style={{ fontSize: '12px', color: '#6b7280' }}>{compra.material_categoria}</div>
+                        </div>
                       </div>
+                    </td>
+                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
+                      {new Date(compra.fecha).toLocaleDateString('es-CO')}
+                    </td>
+                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
+                      <span style={{ fontWeight: '500' }}>{formatNumber(compra.kilos, 2)} kg</span>
+                    </td>
+                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
+                      {formatCurrency(compra.precio_kilo)}
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '14px' }}>
                       <span style={{ 
@@ -514,11 +634,6 @@ const ComprasGenerales: React.FC = () => {
                         color: color.text
                       }}>
                         {getTipoPrecioLabel(compra.tipo_precio)}
-                      </span>
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#6b7280' }}>
-                      <span>
-                        {compra.observaciones || '-'}
                       </span>
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
@@ -549,8 +664,8 @@ const ComprasGenerales: React.FC = () => {
           
           {compras.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px' }}>
-              <ShoppingCart size={48} style={{ color: '#9ca3af', margin: '0 auto 16px' }} />
-              <p style={{ color: '#6b7280', margin: '0 0 4px 0' }}>No hay compras registradas</p>
+              <Package size={48} style={{ color: '#9ca3af', margin: '0 auto 16px' }} />
+              <p style={{ color: '#6b7280', margin: '0 0 4px 0' }}>No hay compras por material registradas</p>
               <p style={{ fontSize: '14px', color: '#9ca3af', margin: 0 }}>
                 Usa el botón "Nueva Compra" para empezar
               </p>
@@ -567,89 +682,195 @@ const ComprasGenerales: React.FC = () => {
           setEditingCompra(null);
           resetForm();
         }}
-        title={editingCompra ? 'Editar Compra General' : 'Nueva Compra General'}
+        title={editingCompra ? 'Editar Compra por Material' : 'Nueva Compra por Material'}
+        size="lg"
       >
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
-          <div>
-            <label style={{ 
-              display: 'block', 
-              fontSize: '14px', 
-              fontWeight: '500', 
-              color: '#374151', 
-              marginBottom: '4px' 
-            }}>
-              Fecha
-            </label>
-            <input
-              type="date"
-              required
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px'
-              }}
-              value={formData.fecha}
-              onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
-            />
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gap: '16px' 
+          }}>
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#374151', 
+                marginBottom: '4px' 
+              }}>
+                Material *
+              </label>
+              <select
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  backgroundColor: 'white',
+                  fontSize: '14px'
+                }}
+                value={formData.material_id}
+                onChange={(e) => {
+                  setFormData({ ...formData, material_id: e.target.value });
+                  if (e.target.value) {
+                    handleMaterialOrTipoChange(e.target.value, formData.tipo_precio);
+                  }
+                }}
+              >
+                <option value="">Seleccionar material</option>
+                {materiales.map(material => (
+                  <option key={material.id} value={material.id}>
+                    {material.nombre} - {material.categoria}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#374151', 
+                marginBottom: '4px' 
+              }}>
+                Fecha *
+              </label>
+              <input
+                type="date"
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+                value={formData.fecha}
+                onChange={(e) => setFormData({ ...formData, fecha: e.target.value })}
+              />
+            </div>
           </div>
 
-          <div>
-            <label style={{ 
-              display: 'block', 
-              fontSize: '14px', 
-              fontWeight: '500', 
-              color: '#374151', 
-              marginBottom: '4px' 
-            }}>
-              Total en Pesos
-            </label>
-            <input
-              type="number"
-              required
-              min="0.01"
-              step="0.01"
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                fontSize: '14px'
-              }}
-              value={formData.total_pesos}
-              onChange={(e) => setFormData({ ...formData, total_pesos: parseFloat(e.target.value) || 0 })}
-              placeholder="0.00"
-            />
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
+            gap: '16px' 
+          }}>
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#374151', 
+                marginBottom: '4px' 
+              }}>
+                Kilos *
+              </label>
+              <input
+                type="number"
+                required
+                min="0.001"
+                step="0.001"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+                value={formData.kilos}
+                onChange={(e) => setFormData({ ...formData, kilos: parseFloat(e.target.value) || 0 })}
+                placeholder="0.000"
+              />
+            </div>
+
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#374151', 
+                marginBottom: '4px' 
+              }}>
+                Precio por Kilo *
+              </label>
+              <input
+                type="number"
+                required
+                min="0.01"
+                step="0.01"
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  fontSize: '14px'
+                }}
+                value={formData.precio_kilo}
+                onChange={(e) => setFormData({ ...formData, precio_kilo: parseFloat(e.target.value) || 0 })}
+                placeholder="0.00"
+              />
+            </div>
+
+            <div>
+              <label style={{ 
+                display: 'block', 
+                fontSize: '14px', 
+                fontWeight: '500', 
+                color: '#374151', 
+                marginBottom: '4px' 
+              }}>
+                Tipo de Precio *
+              </label>
+              <select
+                required
+                style={{
+                  width: '100%',
+                  padding: '8px 12px',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '6px',
+                  backgroundColor: 'white',
+                  fontSize: '14px'
+                }}
+                value={formData.tipo_precio}
+                onChange={(e) => {
+                  const tipoPrecio = e.target.value as 'ordinario' | 'camion' | 'noche';
+                  setFormData({ ...formData, tipo_precio: tipoPrecio });
+                  if (formData.material_id) {
+                    handleMaterialOrTipoChange(formData.material_id, tipoPrecio);
+                  }
+                }}
+              >
+                <option value="ordinario">Ordinario</option>
+                <option value="camion">Camión</option>
+                <option value="noche">Noche</option>
+              </select>
+            </div>
           </div>
 
-          <div>
-            <label style={{ 
-              display: 'block', 
-              fontSize: '14px', 
-              fontWeight: '500', 
-              color: '#374151', 
-              marginBottom: '4px' 
-            }}>
-              Tipo de Precio
-            </label>
-            <select
-              required
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                backgroundColor: 'white',
-                fontSize: '14px'
-              }}
-              value={formData.tipo_precio}
-              onChange={(e) => setFormData({ ...formData, tipo_precio: e.target.value as 'ordinario' | 'camion' | 'noche' })}
-            >
-              <option value="ordinario">Ordinario</option>
-              <option value="camion">Camión</option>
-              <option value="noche">Noche</option>
-            </select>
+          {/* Calculadora de total */}
+          <div style={{
+            backgroundColor: '#f9fafb',
+            padding: '16px',
+            borderRadius: '8px',
+            border: '1px solid #e5e7eb'
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Calculator size={20} style={{ color: '#6b7280' }} />
+                <span style={{ fontSize: '14px', color: '#6b7280' }}>Total calculado:</span>
+              </div>
+              <span style={{ 
+                fontSize: '20px', 
+                fontWeight: 'bold', 
+                color: '#059669' 
+              }}>
+                {formatCurrency(totalCalculado)}
+              </span>
+            </div>
           </div>
 
           <div>
@@ -697,4 +918,4 @@ const ComprasGenerales: React.FC = () => {
   );
 };
 
-export default ComprasGenerales;
+export default ComprasMateriales;
