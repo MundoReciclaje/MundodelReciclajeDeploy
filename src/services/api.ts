@@ -325,10 +325,15 @@ export const gastosService = {
 
 // Servicio para clientes (autocompletado)
 export const clientesService = {
-  buscar: async (busqueda: string): Promise<string[]> => {
-    const response = await api.get(`/compras/clientes/lista`, {
-      params: { buscar: busqueda }
-    });
+  buscar: async (busqueda: string, tipo?: 'general' | 'material'): Promise<string[]> => {
+    const params: any = { buscar: busqueda };
+    
+    // Agregar el parámetro tipo si se proporciona
+    if (tipo) {
+      params.tipo = tipo;
+    }
+    
+    const response = await api.get(`/compras/clientes/lista`, { params });
     return response.data;
   },
 };
