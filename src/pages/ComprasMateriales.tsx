@@ -73,21 +73,21 @@ const ComprasMateriales: React.FC = () => {
   }, [filtros.cliente]);
 
   const buscarClientes = async (busqueda: string, origen: 'formulario' | 'filtro') => {
-    try {
-      // Usar el servicio de API en lugar de fetch directo
-      const clientes = await clientesService.buscar(busqueda);
-      setClientesSugeridos(clientes);
-      
-      if (origen === 'formulario') {
-        setMostrarSugerenciasFormulario(true);
-      } else {
-        setMostrarSugerenciasFiltro(true);
-      }
-    } catch (error) {
-      console.error('Error buscando clientes:', error);
-      setClientesSugeridos([]);
+  try {
+    // Especificar que es tipo 'material' ya que estamos en ComprasMateriales
+    const clientes = await clientesService.buscar(busqueda, 'material');
+    setClientesSugeridos(clientes);
+    
+    if (origen === 'formulario') {
+      setMostrarSugerenciasFormulario(true);
+    } else {
+      setMostrarSugerenciasFiltro(true);
     }
-  };
+  } catch (error) {
+    console.error('Error buscando clientes:', error);
+    setClientesSugeridos([]);
+  }
+};
 
   const seleccionarClienteFormulario = (cliente: string) => {
     setFormData({ ...formData, cliente });
