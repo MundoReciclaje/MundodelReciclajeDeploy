@@ -1,81 +1,86 @@
-// Archivo: src/pages/ComprasMateriales.tsx
+// Archivo: src/pages/Gastos.tsx
 
 import React, { useState, useEffect } from 'react';
-import { Plus, Search, Edit, Trash2, Package, Calculator } from 'lucide-react';
-import { CompraMaterial, Material, comprasMaterialesService, materialesService, formatCurrency, formatNumber } from '../services/api';
+import { Plus, Edit, Trash2, Receipt, CreditCard, Settings } from 'lucide-react';
+import { Gasto, CategoriaGasto, gastosService, formatCurrency } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Modal } from '../components/ui/Modal';
 import { useToast } from '../components/ui/Toast';
 
-const ComprasMateriales: React.FC = () => {
-  const [compras, setCompras] = useState<CompraMaterial[]>([]);
-  const [materiales, setMateriales] = useState<Material[]>([]);
+const Gastos: React.FC = () => {
+  const [gastos, setGastos] = useState<Gasto[]>([]);
+  const [categorias, setCategorias] = useState<CategoriaGasto[]>([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
-  const [editingCompra, setEditingCompra] = useState<CompraMaterial | null>(null);
+  const [showCategoriaModal, setShowCategoriaModal] = useState(false);
+  const [editingGasto, setEditingGasto] = useState<Gasto | null>(null);
   const [filtros, setFiltros] = useState({
     fecha_inicio: '',
     fecha_fin: '',
-    material_id: '',
-    tipo_precio: ''
+    categoria_id: ''
   });
   const { addToast } = useToast();
 
-  // Estados para el formulario
+  // Estados para el formulario de gastos
   const [formData, setFormData] = useState({
-    material_id: '',
+    categoria_id: '',
     fecha: new Date().toISOString().split('T')[0],
-    kilos: 0,
-    precio_kilo: 0,
-    tipo_precio: 'ordinario' as 'ordinario' | 'camion' | 'noche',
+    concepto: '',
+    valor: 0,
     observaciones: '',
   });
 
+  // Estados para el formulario de categorías
+  const [categoriaData, setCategoriaData] = useState({
+    nombre: '',
+    descripcion: '',
+  });
+
   useEffect(() => {
-    fetchCompras();
-    fetchMateriales();
+    fetchGastos();
+    fetchCategorias();
   }, [filtros]);
 
-  const fetchCompras = async () => {
+  const fetchGastos = async () => {
     try {
       setLoading(true);
-      const response = await comprasMaterialesService.getAll({
+      const response = await gastosService.getAll({
         ...filtros,
-        material_id: filtros.material_id ? parseInt(filtros.material_id) : undefined,
+        categoria_id: filtros.categoria_id ? parseInt(filtros.categoria_id) : undefined,
         limite: 100,
         pagina: 1
       });
-      setCompras(response.data);
+      setGastos(response.data);
     } catch (error) {
-      console.error('Error cargando compras:', error);
+      console.error('Error cargando gastos:', error);
       addToast({
         type: 'error',
         title: 'Error',
-        message: 'No se pudieron cargar las compras'
+        message: 'No se pudieron cargar los gastos'
       });
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchMateriales = async () => {
+  const fetchCategorias = async () => {
     try {
-      const data = await materialesService.getAll({ activo: true });
-      setMateriales(data);
+      const data = await gastosService.getCategorias();
+      setCategorias(data);
     } catch (error) {
-      console.error('Error cargando materiales:', error);
+      console.error('Error cargando categorías:', error);
     }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    if (!formData.material_id || formData.kilos <= 0 || formData.precio_kilo <= 0) {
+    if (!formData.categoria_id || !formData.concepto || formData.valor <= 0) {
       addToast({
         type: 'warning',
         title: 'Datos inválidos',
-        message: 'Todos los campos son requeridos y deben ser mayores a cero'
+        message: 'Categoría, concepto y valor son requeridos'
       });
       return;
     }
@@ -83,117 +88,126 @@ const ComprasMateriales: React.FC = () => {
     try {
       const submitData = {
         ...formData,
-        material_id: parseInt(formData.material_id)
+        categoria_id: parseInt(formData.categoria_id)
       };
 
-      if (editingCompra) {
-        await comprasMaterialesService.update(editingCompra.id, submitData);
+      if (editingGasto) {
+        await gastosService.update(editingGasto.id, submitData);
         addToast({
           type: 'success',
-          title: 'Compra actualizada',
-          message: 'La compra se ha actualizado correctamente'
+          title: 'Gasto actualizado',
+          message: 'El gasto se ha actualizado correctamente'
         });
       } else {
-        await comprasMaterialesService.create(submitData);
+        await gastosService.create(submitData);
         addToast({
           type: 'success',
-          title: 'Compra registrada',
-          message: 'La compra se ha registrado correctamente'
+          title: 'Gasto registrado',
+          message: 'El gasto se ha registrado correctamente'
         });
       }
       
       setShowModal(false);
-      setEditingCompra(null);
+      setEditingGasto(null);
       resetForm();
-      fetchCompras();
+      fetchGastos();
     } catch (error: any) {
-      console.error('Error guardando compra:', error);
+      console.error('Error guardando gasto:', error);
       addToast({
         type: 'error',
         title: 'Error',
-        message: error.response?.data?.error || 'Error al guardar la compra'
+        message: error.response?.data?.error || 'Error al guardar el gasto'
+      });
+    }
+  };
+
+  const handleCategoriaSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (!categoriaData.nombre) {
+      addToast({
+        type: 'warning',
+        title: 'Datos inválidos',
+        message: 'El nombre de la categoría es requerido'
+      });
+      return;
+    }
+    
+    try {
+      await gastosService.createCategoria(categoriaData);
+      addToast({
+        type: 'success',
+        title: 'Categoría creada',
+        message: 'La categoría se ha creado correctamente'
+      });
+      
+      setShowCategoriaModal(false);
+      setCategoriaData({ nombre: '', descripcion: '' });
+      fetchCategorias();
+    } catch (error: any) {
+      console.error('Error creando categoría:', error);
+      addToast({
+        type: 'error',
+        title: 'Error',
+        message: error.response?.data?.error || 'Error al crear la categoría'
       });
     }
   };
 
   const resetForm = () => {
     setFormData({
-      material_id: '',
+      categoria_id: '',
       fecha: new Date().toISOString().split('T')[0],
-      kilos: 0,
-      precio_kilo: 0,
-      tipo_precio: 'ordinario',
+      concepto: '',
+      valor: 0,
       observaciones: '',
     });
   };
 
-  const handleEdit = (compra: CompraMaterial) => {
-    setEditingCompra(compra);
+  const handleEdit = (gasto: Gasto) => {
+    setEditingGasto(gasto);
     setFormData({
-      material_id: compra.material_id.toString(),
-      fecha: compra.fecha,
-      kilos: compra.kilos,
-      precio_kilo: compra.precio_kilo,
-      tipo_precio: compra.tipo_precio,
-      observaciones: compra.observaciones || '',
+      categoria_id: gasto.categoria_id.toString(),
+      fecha: gasto.fecha,
+      concepto: gasto.concepto,
+      valor: gasto.valor,
+      observaciones: gasto.observaciones || '',
     });
     setShowModal(true);
   };
 
-  const handleDelete = async (compra: CompraMaterial) => {
-    if (window.confirm(`¿Estás seguro de que quieres eliminar esta compra de ${compra.material_nombre}?`)) {
+  const handleDelete = async (gasto: Gasto) => {
+    if (window.confirm(`¿Estás seguro de que quieres eliminar el gasto "${gasto.concepto}"?`)) {
       try {
-        await comprasMaterialesService.delete(compra.id);
+        await gastosService.delete(gasto.id);
         addToast({
           type: 'success',
-          title: 'Compra eliminada',
-          message: 'La compra se ha eliminado correctamente'
+          title: 'Gasto eliminado',
+          message: 'El gasto se ha eliminado correctamente'
         });
-        fetchCompras();
+        fetchGastos();
       } catch (error: any) {
-        console.error('Error eliminando compra:', error);
+        console.error('Error eliminando gasto:', error);
         addToast({
           type: 'error',
           title: 'Error',
-          message: 'Error al eliminar la compra'
+          message: 'Error al eliminar el gasto'
         });
       }
     }
   };
 
-  const getTipoPrecioColor = (tipo: string) => {
+  const getCategoriaColor = (categoria: string) => {
     const colors: { [key: string]: { bg: string; text: string } } = {
-      'ordinario': { bg: '#dbeafe', text: '#1e40af' },
-      'camion': { bg: '#dcfce7', text: '#166534' },
-      'noche': { bg: '#e9d5ff', text: '#7c3aed' }
+      'Sueldos': { bg: '#dbeafe', text: '#1e40af' },
+      'Gas Camión': { bg: '#fed7aa', text: '#ea580c' },
+      'Alimentación': { bg: '#dcfce7', text: '#166534' },
+      'Mantenimiento': { bg: '#fef3c7', text: '#92400e' },
+      'Servicios': { bg: '#e9d5ff', text: '#7c3aed' },
+      'Otros': { bg: '#f3f4f6', text: '#374151' }
     };
-    return colors[tipo] || colors['ordinario'];
+    return colors[categoria] || colors['Otros'];
   };
-
-  const getTipoPrecioLabel = (tipo: string) => {
-    const labels: { [key: string]: string } = {
-      'ordinario': 'Ordinario',
-      'camion': 'Camión',
-      'noche': 'Noche'
-    };
-    return labels[tipo] || tipo;
-  };
-
-  // Auto-completar precio cuando se selecciona material y tipo
-  const handleMaterialOrTipoChange = (materialId: string, tipoPrecio: string) => {
-    const material = materiales.find(m => m.id.toString() === materialId);
-    if (material) {
-      let precio = 0;
-      switch (tipoPrecio) {
-        case 'ordinario': precio = material.precio_ordinario; break;
-        case 'camion': precio = material.precio_camion; break;
-        case 'noche': precio = material.precio_noche; break;
-      }
-      setFormData(prev => ({ ...prev, precio_kilo: precio }));
-    }
-  };
-
-  const totalCalculado = formData.kilos * formData.precio_kilo;
 
   if (loading) {
     return (
@@ -221,22 +235,31 @@ const ComprasMateriales: React.FC = () => {
             color: '#111827', 
             margin: '0 0 8px 0' 
           }}>
-            Compras por Material
+            Gastos
           </h1>
           <p style={{ 
             fontSize: '14px', 
             color: '#6b7280', 
             margin: 0 
           }}>
-            Registra compras específicas por tipo de material
+            Controla y categoriza todos los gastos del negocio
           </p>
         </div>
-        <Button
-          onClick={() => setShowModal(true)}
-          icon={<Plus size={16} />}
-        >
-          Nueva Compra
-        </Button>
+        <div style={{ display: 'flex', gap: '12px' }}>
+          <Button
+            variant="secondary"
+            onClick={() => setShowCategoriaModal(true)}
+            icon={<Settings size={16} />}
+          >
+            Nueva Categoría
+          </Button>
+          <Button
+            onClick={() => setShowModal(true)}
+            icon={<Plus size={16} />}
+          >
+            Nuevo Gasto
+          </Button>
+        </div>
       </div>
 
       {/* Filtros */}
@@ -307,7 +330,7 @@ const ComprasMateriales: React.FC = () => {
               color: '#374151', 
               marginBottom: '4px' 
             }}>
-              Material
+              Categoría
             </label>
             <select
               style={{
@@ -318,168 +341,72 @@ const ComprasMateriales: React.FC = () => {
                 backgroundColor: 'white',
                 fontSize: '14px'
               }}
-              value={filtros.material_id}
-              onChange={(e) => setFiltros({ ...filtros, material_id: e.target.value })}
+              value={filtros.categoria_id}
+              onChange={(e) => setFiltros({ ...filtros, categoria_id: e.target.value })}
             >
-              <option value="">Todos los materiales</option>
-              {materiales.map(material => (
-                <option key={material.id} value={material.id}>
-                  {material.nombre}
+              <option value="">Todas las categorías</option>
+              {categorias.map(categoria => (
+                <option key={categoria.id} value={categoria.id}>
+                  {categoria.nombre}
                 </option>
               ))}
             </select>
           </div>
-          <div>
-            <label style={{ 
-              display: 'block', 
-              fontSize: '14px', 
-              fontWeight: '500', 
-              color: '#374151', 
-              marginBottom: '4px' 
-            }}>
-              Tipo de Precio
-            </label>
-            <select
-              style={{
-                width: '100%',
-                padding: '8px 12px',
-                border: '1px solid #d1d5db',
-                borderRadius: '6px',
-                backgroundColor: 'white',
-                fontSize: '14px'
-              }}
-              value={filtros.tipo_precio}
-              onChange={(e) => setFiltros({ ...filtros, tipo_precio: e.target.value })}
-            >
-              <option value="">Todos los tipos</option>
-              <option value="ordinario">Ordinario</option>
-              <option value="camion">Camión</option>
-              <option value="noche">Noche</option>
-            </select>
-          </div>
         </div>
       </div>
 
-      {/* Estadísticas */}
+      {/* Estadísticas por categoría */}
       <div style={{ 
         display: 'grid', 
-        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+        gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
         gap: '20px', 
         marginBottom: '32px' 
       }}>
-        <div style={{
-          backgroundColor: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e5e7eb'
-        }}>
-          <div style={{ 
-            fontSize: '14px', 
-            color: '#6b7280', 
-            fontWeight: '500',
-            margin: '0 0 4px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em'
-          }}>
-            Total Compras
-          </div>
-          <div style={{ 
-            fontSize: '24px', 
-            fontWeight: 'bold', 
-            color: '#111827',
-            margin: '0 0 8px 0'
-          }}>
-            {formatCurrency(compras.reduce((sum, compra) => sum + compra.total_pesos, 0))}
-          </div>
-        </div>
-
-        <div style={{
-          backgroundColor: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e5e7eb'
-        }}>
-          <div style={{ 
-            fontSize: '14px', 
-            color: '#6b7280', 
-            fontWeight: '500',
-            margin: '0 0 4px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em'
-          }}>
-            Total Kilos
-          </div>
-          <div style={{ 
-            fontSize: '24px', 
-            fontWeight: 'bold', 
-            color: '#111827',
-            margin: '0 0 8px 0'
-          }}>
-            {formatNumber(compras.reduce((sum, compra) => sum + compra.kilos, 0), 0)} kg
-          </div>
-        </div>
-
-        <div style={{
-          backgroundColor: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e5e7eb'
-        }}>
-          <div style={{ 
-            fontSize: '14px', 
-            color: '#6b7280', 
-            fontWeight: '500',
-            margin: '0 0 4px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em'
-          }}>
-            Precio Promedio/Kg
-          </div>
-          <div style={{ 
-            fontSize: '24px', 
-            fontWeight: 'bold', 
-            color: '#111827',
-            margin: '0 0 8px 0'
-          }}>
-            {compras.length > 0 
-              ? formatCurrency(compras.reduce((sum, compra) => sum + compra.precio_kilo, 0) / compras.length)
-              : formatCurrency(0)
-            }
-          </div>
-        </div>
-
-        <div style={{
-          backgroundColor: 'white',
-          padding: '24px',
-          borderRadius: '8px',
-          boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-          border: '1px solid #e5e7eb'
-        }}>
-          <div style={{ 
-            fontSize: '14px', 
-            color: '#6b7280', 
-            fontWeight: '500',
-            margin: '0 0 4px 0',
-            textTransform: 'uppercase',
-            letterSpacing: '0.05em'
-          }}>
-            Transacciones
-          </div>
-          <div style={{ 
-            fontSize: '24px', 
-            fontWeight: 'bold', 
-            color: '#111827',
-            margin: '0 0 8px 0'
-          }}>
-            {compras.length}
-          </div>
-        </div>
+        {categorias.map(categoria => {
+          const gastosCategoria = gastos.filter(g => g.categoria_id === categoria.id);
+          const total = gastosCategoria.reduce((sum, g) => sum + g.valor, 0);
+          const color = getCategoriaColor(categoria.nombre);
+          
+          return (
+            <div key={categoria.id} style={{
+              backgroundColor: 'white',
+              padding: '24px',
+              borderRadius: '8px',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+              border: '1px solid #e5e7eb'
+            }}>
+              <div style={{ 
+                fontSize: '14px', 
+                color: '#6b7280', 
+                fontWeight: '500',
+                margin: '0 0 4px 0',
+                textTransform: 'uppercase',
+                letterSpacing: '0.05em'
+              }}>
+                {categoria.nombre}
+              </div>
+              <div style={{ 
+                fontSize: '24px', 
+                fontWeight: 'bold', 
+                color: '#111827',
+                margin: '0 0 8px 0'
+              }}>
+                {formatCurrency(total)}
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                fontWeight: '500',
+                color: '#6b7280',
+                margin: 0
+              }}>
+                {gastosCategoria.length} transacciones
+              </div>
+            </div>
+          );
+        })}
       </div>
 
-      {/* Tabla de compras */}
+      {/* Tabla de gastos */}
       <div style={{
         backgroundColor: 'white',
         borderRadius: '8px',
@@ -492,24 +419,13 @@ const ComprasMateriales: React.FC = () => {
           borderBottom: '1px solid #e5e7eb'
         }}>
           <h3 style={{ fontSize: '18px', fontWeight: '600', color: '#111827', margin: 0 }}>
-            Compras Registradas ({compras.length})
+            Gastos Registrados ({gastos.length})
           </h3>
         </div>
         <div style={{ overflowX: 'auto' }}>
           <table style={{ width: '100%', borderCollapse: 'collapse' }}>
             <thead style={{ backgroundColor: '#f9fafb' }}>
               <tr>
-                <th style={{ 
-                  padding: '12px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '12px', 
-                  fontWeight: '500', 
-                  color: '#6b7280',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Material
-                </th>
                 <th style={{ 
                   padding: '12px 24px', 
                   textAlign: 'left', 
@@ -530,7 +446,7 @@ const ComprasMateriales: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Kilos
+                  Categoría
                 </th>
                 <th style={{ 
                   padding: '12px 24px', 
@@ -541,7 +457,7 @@ const ComprasMateriales: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Precio/Kg
+                  Concepto
                 </th>
                 <th style={{ 
                   padding: '12px 24px', 
@@ -552,18 +468,7 @@ const ComprasMateriales: React.FC = () => {
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em'
                 }}>
-                  Total
-                </th>
-                <th style={{ 
-                  padding: '12px 24px', 
-                  textAlign: 'left', 
-                  fontSize: '12px', 
-                  fontWeight: '500', 
-                  color: '#6b7280',
-                  textTransform: 'uppercase',
-                  letterSpacing: '0.05em'
-                }}>
-                  Tipo
+                  Valor
                 </th>
                 <th style={{ 
                   padding: '12px 24px', 
@@ -579,11 +484,11 @@ const ComprasMateriales: React.FC = () => {
               </tr>
             </thead>
             <tbody>
-              {compras.map((compra) => {
-                const color = getTipoPrecioColor(compra.tipo_precio);
+              {gastos.map((gasto) => {
+                const color = getCategoriaColor(gasto.categoria_nombre);
                 return (
                   <tr 
-                    key={compra.id} 
+                    key={gasto.id} 
                     style={{ 
                       borderBottom: '1px solid #f3f4f6',
                       transition: 'background-color 0.15s ease'
@@ -596,31 +501,7 @@ const ComprasMateriales: React.FC = () => {
                     }}
                   >
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <Package size={16} style={{ color: '#9ca3af' }} />
-                        <div>
-                          <div style={{ fontWeight: '500' }}>{compra.material_nombre}</div>
-                          <div style={{ fontSize: '12px', color: '#6b7280' }}>{compra.material_categoria}</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
-                      {new Date(compra.fecha).toLocaleDateString('es-CO')}
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
-                      <span style={{ fontWeight: '500' }}>{formatNumber(compra.kilos, 2)} kg</span>
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
-                      {formatCurrency(compra.precio_kilo)}
-                    </td>
-                    <td style={{ padding: '16px 24px', fontSize: '14px' }}>
-                      <span style={{ 
-                        fontSize: '16px', 
-                        fontWeight: '600', 
-                        color: '#059669' 
-                      }}>
-                        {formatCurrency(compra.total_pesos)}
-                      </span>
+                      {new Date(gasto.fecha).toLocaleDateString('es-CO')}
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
                       <span style={{
@@ -633,7 +514,26 @@ const ComprasMateriales: React.FC = () => {
                         backgroundColor: color.bg,
                         color: color.text
                       }}>
-                        {getTipoPrecioLabel(compra.tipo_precio)}
+                        {gasto.categoria_nombre}
+                      </span>
+                    </td>
+                    <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
+                      <div>
+                        <div style={{ fontWeight: '500' }}>{gasto.concepto}</div>
+                        {gasto.observaciones && (
+                          <div style={{ fontSize: '12px', color: '#6b7280', marginTop: '2px' }}>
+                            {gasto.observaciones}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: '16px 24px', fontSize: '14px' }}>
+                      <span style={{ 
+                        fontSize: '16px', 
+                        fontWeight: '600', 
+                        color: '#ef4444' 
+                      }}>
+                        {formatCurrency(gasto.valor)}
                       </span>
                     </td>
                     <td style={{ padding: '16px 24px', fontSize: '14px', color: '#111827' }}>
@@ -641,7 +541,7 @@ const ComprasMateriales: React.FC = () => {
                         <Button
                           variant="secondary"
                           size="sm"
-                          onClick={() => handleEdit(compra)}
+                          onClick={() => handleEdit(gasto)}
                           icon={<Edit size={14} />}
                         >
                           Editar
@@ -649,7 +549,7 @@ const ComprasMateriales: React.FC = () => {
                         <Button
                           variant="danger"
                           size="sm"
-                          onClick={() => handleDelete(compra)}
+                          onClick={() => handleDelete(gasto)}
                           icon={<Trash2 size={14} />}
                         >
                           Eliminar
@@ -662,33 +562,32 @@ const ComprasMateriales: React.FC = () => {
             </tbody>
           </table>
           
-          {compras.length === 0 && (
+          {gastos.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px' }}>
-              <Package size={48} style={{ color: '#9ca3af', margin: '0 auto 16px' }} />
-              <p style={{ color: '#6b7280', margin: '0 0 4px 0' }}>No hay compras por material registradas</p>
+              <Receipt size={48} style={{ color: '#9ca3af', margin: '0 auto 16px' }} />
+              <p style={{ color: '#6b7280', margin: '0 0 4px 0' }}>No hay gastos registrados</p>
               <p style={{ fontSize: '14px', color: '#9ca3af', margin: 0 }}>
-                Usa el botón "Nueva Compra" para empezar
+                Usa el botón "Nuevo Gasto" para empezar
               </p>
             </div>
           )}
         </div>
       </div>
 
-      {/* Modal de formulario */}
+      {/* Modal de formulario de gastos */}
       <Modal
         isOpen={showModal}
         onClose={() => {
           setShowModal(false);
-          setEditingCompra(null);
+          setEditingGasto(null);
           resetForm();
         }}
-        title={editingCompra ? 'Editar Compra por Material' : 'Nueva Compra por Material'}
-        size="lg"
+        title={editingGasto ? 'Editar Gasto' : 'Nuevo Gasto'}
       >
         <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           <div style={{ 
             display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
             gap: '16px' 
           }}>
             <div>
@@ -699,7 +598,7 @@ const ComprasMateriales: React.FC = () => {
                 color: '#374151', 
                 marginBottom: '4px' 
               }}>
-                Material *
+                Categoría *
               </label>
               <select
                 required
@@ -711,18 +610,13 @@ const ComprasMateriales: React.FC = () => {
                   backgroundColor: 'white',
                   fontSize: '14px'
                 }}
-                value={formData.material_id}
-                onChange={(e) => {
-                  setFormData({ ...formData, material_id: e.target.value });
-                  if (e.target.value) {
-                    handleMaterialOrTipoChange(e.target.value, formData.tipo_precio);
-                  }
-                }}
+                value={formData.categoria_id}
+                onChange={(e) => setFormData({ ...formData, categoria_id: e.target.value })}
               >
-                <option value="">Seleccionar material</option>
-                {materiales.map(material => (
-                  <option key={material.id} value={material.id}>
-                    {material.nombre} - {material.categoria}
+                <option value="">Seleccionar categoría</option>
+                {categorias.map(categoria => (
+                  <option key={categoria.id} value={categoria.id}>
+                    {categoria.nombre}
                   </option>
                 ))}
               </select>
@@ -754,123 +648,30 @@ const ComprasMateriales: React.FC = () => {
             </div>
           </div>
 
-          <div style={{ 
-            display: 'grid', 
-            gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', 
-            gap: '16px' 
-          }}>
-            <div>
-              <label style={{ 
-                display: 'block', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#374151', 
-                marginBottom: '4px' 
-              }}>
-                Kilos *
-              </label>
-              <input
-                type="number"
-                required
-                min="0.001"
-                step="0.001"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '14px'
-                }}
-                value={formData.kilos}
-                onChange={(e) => setFormData({ ...formData, kilos: parseFloat(e.target.value) || 0 })}
-                placeholder="0.000"
-              />
-            </div>
-
-            <div>
-              <label style={{ 
-                display: 'block', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#374151', 
-                marginBottom: '4px' 
-              }}>
-                Precio por Kilo *
-              </label>
-              <input
-                type="number"
-                required
-                min="0.01"
-                step="0.01"
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  fontSize: '14px'
-                }}
-                value={formData.precio_kilo}
-                onChange={(e) => setFormData({ ...formData, precio_kilo: parseFloat(e.target.value) || 0 })}
-                placeholder="0.00"
-              />
-            </div>
-
-            <div>
-              <label style={{ 
-                display: 'block', 
-                fontSize: '14px', 
-                fontWeight: '500', 
-                color: '#374151', 
-                marginBottom: '4px' 
-              }}>
-                Tipo de Precio *
-              </label>
-              <select
-                required
-                style={{
-                  width: '100%',
-                  padding: '8px 12px',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '6px',
-                  backgroundColor: 'white',
-                  fontSize: '14px'
-                }}
-                value={formData.tipo_precio}
-                onChange={(e) => {
-                  const tipoPrecio = e.target.value as 'ordinario' | 'camion' | 'noche';
-                  setFormData({ ...formData, tipo_precio: tipoPrecio });
-                  if (formData.material_id) {
-                    handleMaterialOrTipoChange(formData.material_id, tipoPrecio);
-                  }
-                }}
-              >
-                <option value="ordinario">Ordinario</option>
-                <option value="camion">Camión</option>
-                <option value="noche">Noche</option>
-              </select>
-            </div>
-          </div>
-
-          {/* Calculadora de total */}
-          <div style={{
-            backgroundColor: '#f9fafb',
-            padding: '16px',
-            borderRadius: '8px',
-            border: '1px solid #e5e7eb'
-          }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Calculator size={20} style={{ color: '#6b7280' }} />
-                <span style={{ fontSize: '14px', color: '#6b7280' }}>Total calculado:</span>
-              </div>
-              <span style={{ 
-                fontSize: '20px', 
-                fontWeight: 'bold', 
-                color: '#059669' 
-              }}>
-                {formatCurrency(totalCalculado)}
-              </span>
-            </div>
+          <div>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: '#374151', 
+              marginBottom: '4px' 
+            }}>
+              Concepto *
+            </label>
+            <input
+              type="text"
+              required
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={formData.concepto}
+              onChange={(e) => setFormData({ ...formData, concepto: e.target.value })}
+              placeholder="Descripción del gasto"
+            />
           </div>
 
           <div>
@@ -881,7 +682,35 @@ const ComprasMateriales: React.FC = () => {
               color: '#374151', 
               marginBottom: '4px' 
             }}>
-              Observaciones (Opcional)
+              Valor *
+            </label>
+            <input
+              type="number"
+              required
+              min="0.01"
+              step="0.01"
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={formData.valor}
+              onChange={(e) => setFormData({ ...formData, valor: parseFloat(e.target.value) || 0 })}
+              placeholder="0.00"
+            />
+          </div>
+
+          <div>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: '#374151', 
+              marginBottom: '4px' 
+            }}>
+              Observaciones
             </label>
             <textarea
               style={{
@@ -896,7 +725,7 @@ const ComprasMateriales: React.FC = () => {
               rows={3}
               value={formData.observaciones}
               onChange={(e) => setFormData({ ...formData, observaciones: e.target.value })}
-              placeholder="Notas adicionales sobre esta compra..."
+              placeholder="Detalles adicionales del gasto..."
             />
           </div>
 
@@ -909,7 +738,85 @@ const ComprasMateriales: React.FC = () => {
               Cancelar
             </Button>
             <Button type="submit">
-              {editingCompra ? 'Actualizar' : 'Registrar'} Compra
+              {editingGasto ? 'Actualizar' : 'Registrar'} Gasto
+            </Button>
+          </div>
+        </form>
+      </Modal>
+
+      {/* Modal de nueva categoría */}
+      <Modal
+        isOpen={showCategoriaModal}
+        onClose={() => {
+          setShowCategoriaModal(false);
+          setCategoriaData({ nombre: '', descripcion: '' });
+        }}
+        title="Nueva Categoría de Gasto"
+      >
+        <form onSubmit={handleCategoriaSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+          <div>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: '#374151', 
+              marginBottom: '4px' 
+            }}>
+              Nombre de la Categoría *
+            </label>
+            <input
+              type="text"
+              required
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px'
+              }}
+              value={categoriaData.nombre}
+              onChange={(e) => setCategoriaData({ ...categoriaData, nombre: e.target.value })}
+              placeholder="Ej: Mantenimiento Vehículos"
+            />
+          </div>
+
+          <div>
+            <label style={{ 
+              display: 'block', 
+              fontSize: '14px', 
+              fontWeight: '500', 
+              color: '#374151', 
+              marginBottom: '4px' 
+            }}>
+              Descripción
+            </label>
+            <textarea
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid #d1d5db',
+                borderRadius: '6px',
+                fontSize: '14px',
+                minHeight: '80px',
+                resize: 'vertical'
+              }}
+              rows={3}
+              value={categoriaData.descripcion}
+              onChange={(e) => setCategoriaData({ ...categoriaData, descripcion: e.target.value })}
+              placeholder="Descripción opcional de la categoría..."
+            />
+          </div>
+
+          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '16px' }}>
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => setShowCategoriaModal(false)}
+            >
+              Cancelar
+            </Button>
+            <Button type="submit">
+              Crear Categoría
             </Button>
           </div>
         </form>
@@ -918,4 +825,4 @@ const ComprasMateriales: React.FC = () => {
   );
 };
 
-export default ComprasMateriales;
+export default Gastos;
