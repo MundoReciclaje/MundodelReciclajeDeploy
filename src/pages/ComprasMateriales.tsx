@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Plus, Search, Edit, Trash2, Package, Calculator, User } from 'lucide-react';
-import { CompraMaterial, Material, comprasMaterialesService, materialesService, formatCurrency, formatNumber } from '../services/api';
+import { CompraMaterial, Material, comprasMaterialesService, materialesService, clientesService, formatCurrency, formatNumber } from '../services/api';
 import { Button } from '../components/ui/Button';
 import { LoadingSpinner } from '../components/ui/LoadingSpinner';
 import { Modal } from '../components/ui/Modal';
@@ -74,24 +74,18 @@ const ComprasMateriales: React.FC = () => {
 
   const buscarClientes = async (busqueda: string, origen: 'formulario' | 'filtro') => {
     try {
-      const response = await fetch(`/api/compras/clientes/lista?buscar=${encodeURIComponent(busqueda)}`, {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
-      });
+      // Usar el servicio de API en lugar de fetch directo
+      const clientes = await clientesService.buscar(busqueda);
+      setClientesSugeridos(clientes);
       
-      if (response.ok) {
-        const clientes = await response.json();
-        setClientesSugeridos(clientes);
-        
-        if (origen === 'formulario') {
-          setMostrarSugerenciasFormulario(true);
-        } else {
-          setMostrarSugerenciasFiltro(true);
-        }
+      if (origen === 'formulario') {
+        setMostrarSugerenciasFormulario(true);
+      } else {
+        setMostrarSugerenciasFiltro(true);
       }
     } catch (error) {
       console.error('Error buscando clientes:', error);
+      setClientesSugeridos([]);
     }
   };
 
